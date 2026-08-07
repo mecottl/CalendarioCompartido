@@ -259,17 +259,40 @@ button:disabled { opacity: 0.6; cursor: default; }
   .app-header { padding: 16px 32px 0 32px; }
   .app-header h1 { font-size: 1.3rem; }
 }
-.paint-hint {
-  display: none;
-  font-size: 0.8rem;
-  color: var(--color-accent);
-  text-align: center;
-  margin: 10px 0 0;
-}
-.paint-hint.visible { display: block; }
 
-.avail-grid.painting {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-  border-radius: 4px;
+.avail-grid,
+.avail-cell {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#avail-grid { touch-action: pan-x pan-y; }
+.avail-grid.paint-mode { touch-action: none; }
+
+.mode-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.mode-btn {
+  flex: 1;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  border: none;
+  border-radius: var(--radius);
+  padding: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mode-btn.active {
+  background: var(--color-accent);
+  color: #0a1e42;
+}
+
+@media (min-width: 768px) {
+  .mode-toggle { display: none; }
 }
