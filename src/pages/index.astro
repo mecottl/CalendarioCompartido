@@ -3,38 +3,92 @@ import Layout from '../layouts/Layout.astro';
 import { getAllParticipants } from '../lib/db';
 
 const participants = await getAllParticipants();
+
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/);
+  const first = parts[0]?.[0] ?? '';
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
+  return (first + last).toUpperCase();
+}
 ---
 <Layout title="Cago verde">
-  <div class="card">
-    <h2>¿Cómo te llamas?</h2>
-    <p class="hint">
-      Escribe tu nombre para marcar tu disponibilidad. Si ya te habías registrado,
-      escribe el mismo nombre para continuar donde lo dejaste.
-    </p>
-    <div class="form-group">
-      <label for="name">Nombre</label>
-      <input type="text" id="name" placeholder="Ej. Vozinha" maxlength="40" autocomplete="name" />
-    </div>
-    <button id="continue-btn">Continuar</button>
-    <p id="error-msg" class="hint" style="color: var(--color-danger); display:none;"></p>
-  </div>
+  {participants.length > 0 ? (
+    <>
+      <div class="card">
+        <h2>¿Quién eres?</h2>
+        <p class="hint">Toca tu nombre para marcar tu disponibilidad.</p>
+        <div class="player-grid">
+          {participants.map((p) => (
+            <button type="button" class="player-btn" data-id={p.id} data-name={p.name}>
+              <span class="player-avatar">{initials(p.name)}</span>
+              <span class="player-name">{p.name}</span>
+            </button>
+          ))}
+        </div>
+      </div>
 
-  {participants.length > 0 && (
+      <div class="card add-player-card">
+        <button type="button" id="toggle-add-btn" class="link-muted" aria-expanded="false">
+          + No estoy en la lista, agregar mi nombre
+        </button>
+        <div id="add-form" class="hidden">
+          <div class="form-group" style="margin-top: 14px;">
+            <label for="name">Nombre</label>
+            <input type="text" id="name" placeholder="Ej. Carlos" maxlength="40" autocomplete="name" />
+          </div>
+          <button id="continue-btn">Agregar y continuar</button>
+          <p id="error-msg" class="hint" style="color: var(--color-danger); display:none;"></p>
+        </div>
+      </div>
+    </>
+  ) : (
     <div class="card">
-      <h3>Ya se registraron ({participants.length})</h3>
-      <div class="participant-list">
-        {participants.map((p) => <span class="chip">{p.name}</span>)}
+      <h2>Sé el primero en registrarte</h2>
+      <p class="hint">Todavía nadie se ha registrado. Escribe tu nombre para empezar.</p>
+      <div id="add-form">
+        <div class="form-group">
+          <label for="name">Nombre</label>
+          <input type="text" id="name" placeholder="Ej. Carlos" maxlength="40" autocomplete="name" />
+        </div>
+        <button id="continue-btn">Agregar y continuar</button>
+        <p id="error-msg" class="hint" style="color: var(--color-danger); display:none;"></p>
       </div>
     </div>
   )}
 </Layout>
 
 <script>
-  const btn = document.getElementById('continue-btn') as HTMLButtonElement;
-  const input = document.getElementById('name') as HTMLInputElement;
-  const errorMsg = document.getElementById('error-msg') as HTMLParagraphElement;
+  type Participant = { id: string; name: string };
+
+  function selectParticipant(participant: Participant) {
+    localStorage.setItem('participant', JSON.stringify(participant));
+    window.location.href = '/disponibilidad';
+  }
+
+  document.querySelectorAll<HTMLButtonElement>('.player-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      selectParticipant({ id: btn.dataset.id!, name: btn.dataset.name! });
+    });
+  });
+
+  const toggleBtn = document.getElementById('toggle-add-btn') as HTMLButtonElement | null;
+  const addForm = document.getElementById('add-form') as HTMLDivElement | null;
+
+  toggleBtn?.addEventListener('click', () => {
+    const isHidden = addForm?.classList.contains('hidden');
+    addForm?.classList.toggle('hidden');
+    toggleBtn.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+    if (isHidden) {
+      document.getElementById('name')?.focus();
+    }
+  });
+
+  const submitBtn = document.getElementById('continue-btn') as HTMLButtonElement | null;
+  const input = document.getElementById('name') as HTMLInputElement | null;
+  const errorMsg = document.getElementById('error-msg') as HTMLParagraphElement | null;
 
   async function submitName() {
+    if (!input || !submitBtn || !errorMsg) return;
     const name = input.value.trim();
     errorMsg.style.display = 'none';
 
@@ -44,8 +98,8 @@ const participants = await getAllParticipants();
       return;
     }
 
-    btn.disabled = true;
-    btn.textContent = 'Guardando...';
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Guardando...';
 
     try {
       const res = await fetch('/api/participantes', {
@@ -56,18 +110,17 @@ const participants = await getAllParticipants();
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al registrar');
 
-      localStorage.setItem('participant', JSON.stringify(data));
-      window.location.href = '/disponibilidad';
+      selectParticipant(data);
     } catch (err: any) {
       errorMsg.textContent = err.message || 'Ocurrió un error, intenta de nuevo.';
       errorMsg.style.display = 'block';
-      btn.disabled = false;
-      btn.textContent = 'Continuar';
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Agregar y continuar';
     }
   }
 
-  btn.addEventListener('click', submitName);
-  input.addEventListener('keydown', (e) => {
+  submitBtn?.addEventListener('click', submitName);
+  input?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') submitName();
   });
 </script>
