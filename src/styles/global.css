@@ -161,7 +161,7 @@ button:disabled { opacity: 0.6; cursor: default; }
   user-select: none;
 }
 
-#avail-grid { touch-action: none; }
+#avail-grid { touch-action: pan-x pan-y; }
 
 .avail-grid .cell-label {
   font-size: 0.7rem;

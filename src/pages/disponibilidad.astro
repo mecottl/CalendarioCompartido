@@ -34,7 +34,6 @@ const HORAS = Array.from({ length: 14 }, (_, i) => i + 8); // 8..21
   </div>
   <p class="save-status" id="save-status"></p>
 </Layout>
-
 <script>
   type Participant = { id: string; name: string };
 
@@ -59,8 +58,13 @@ const HORAS = Array.from({ length: 14 }, (_, i) => i + 8); // 8..21
   const saveStatus = document.getElementById('save-status')!;
 
   let selected = new Set<string>();
-  let dragging = false;
+
+  // Estado para arrastrar con mouse (pintar varias celdas de un jalón)
+  let mouseDragging = false;
   let dragMode: 'add' | 'remove' = 'add';
+
+  // Estado para toque simple con el dedo (sin bloquear el scroll)
+  let touchStartCell: HTMLElement | null = null;
 
   function slotId(day: string, hour: string) {
     return `${day}-${hour}`;
@@ -100,27 +104,47 @@ const HORAS = Array.from({ length: 14 }, (_, i) => i + 8); // 8..21
   grid.addEventListener('pointerdown', (e) => {
     const target = (e.target as HTMLElement).closest('.avail-cell') as HTMLElement | null;
     if (!target) return;
-    dragging = true;
-    const id = slotId(target.dataset.day!, target.dataset.hour!);
-    dragMode = selected.has(id) ? 'remove' : 'add';
-    toggleCell(target, dragMode);
-    grid.setPointerCapture(e.pointerId);
-    e.preventDefault();
+
+    if (e.pointerType === 'mouse') {
+      mouseDragging = true;
+      const id = slotId(target.dataset.day!, target.dataset.hour!);
+      dragMode = selected.has(id) ? 'remove' : 'add';
+      toggleCell(target, dragMode);
+      grid.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    } else {
+      touchStartCell = target;
+    }
   });
 
   grid.addEventListener('pointermove', (e) => {
-    if (!dragging) return;
-    const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
-    const target = el?.closest('.avail-cell') as HTMLElement | null;
-    if (target) toggleCell(target, dragMode);
+    if (mouseDragging && e.pointerType === 'mouse') {
+      const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+      const target = el?.closest('.avail-cell') as HTMLElement | null;
+      if (target) toggleCell(target, dragMode);
+    }
   });
 
-  function endDrag() {
-    dragging = false;
-  }
-  grid.addEventListener('pointerup', endDrag);
-  grid.addEventListener('pointercancel', endDrag);
-  window.addEventListener('pointerup', endDrag);
+  grid.addEventListener('pointerup', (e) => {
+    if (e.pointerType === 'mouse') {
+      mouseDragging = false;
+      return;
+    }
+    if (touchStartCell) {
+      const id = slotId(touchStartCell.dataset.day!, touchStartCell.dataset.hour!);
+      toggleCell(touchStartCell, selected.has(id) ? 'remove' : 'add');
+    }
+    touchStartCell = null;
+  });
+
+  grid.addEventListener('pointercancel', () => {
+    mouseDragging = false;
+    touchStartCell = null;
+  });
+
+  window.addEventListener('pointerup', () => {
+    mouseDragging = false;
+  });
 
   saveBtn.addEventListener('click', async () => {
     if (!participant) return;
