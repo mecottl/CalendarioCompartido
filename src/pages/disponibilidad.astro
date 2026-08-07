@@ -8,8 +8,8 @@ const HORAS = Array.from({ length: 14 }, (_, i) => i + 8); // 8..21
   <div class="card">
     <h2 id="greeting">Mi disponibilidad</h2>
     <p class="hint">
-      Toca o arrastra sobre las casillas para marcar los horarios en los que estás disponible,
-      y no olvides guardar al terminar.
+      Toca una casilla para marcarla. En el celular, mantén presionado y desliza
+      para marcar varias casillas seguidas. No olvides guardar al terminar.
     </p>
     <button id="switch-user-btn" class="link-muted">¿No eres tú? Cambiar de nombre</button>
   </div>
@@ -29,11 +29,14 @@ const HORAS = Array.from({ length: 14 }, (_, i) => i + 8); // 8..21
     </div>
   </div>
 
+  <p class="paint-hint" id="paint-hint">🎨 Modo pintura activo — desliza para marcar varias casillas</p>
+
   <div class="actions-bar">
     <button id="save-btn">Guardar disponibilidad</button>
   </div>
   <p class="save-status" id="save-status"></p>
 </Layout>
+
 <script>
   type Participant = { id: string; name: string };
 
@@ -56,15 +59,23 @@ const HORAS = Array.from({ length: 14 }, (_, i) => i + 8); // 8..21
   const grid = document.getElementById('avail-grid')!;
   const saveBtn = document.getElementById('save-btn') as HTMLButtonElement;
   const saveStatus = document.getElementById('save-status')!;
+  const paintHint = document.getElementById('paint-hint')!;
 
   let selected = new Set<string>();
 
-  // Estado para arrastrar con mouse (pintar varias celdas de un jalón)
+  // --- Mouse: arrastrar pinta varias celdas de inmediato ---
   let mouseDragging = false;
-  let dragMode: 'add' | 'remove' = 'add';
 
-  // Estado para toque simple con el dedo (sin bloquear el scroll)
-  let touchStartCell: HTMLElement | null = null;
+  // --- Touch: mantener presionado activa "modo pintura" ---
+  const LONG_PRESS_MS = 450;
+  const MOVE_THRESHOLD = 10;
+  let dragMode: 'add' | 'remove' = 'add';
+  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  let startCell: HTMLElement | null = null;
+  let startX = 0;
+  let startY = 0;
+  let touchMoved = false;
+  let paintMode = false;
 
   function slotId(day: string, hour: string) {
     return `${day}-${hour}`;
@@ -101,6 +112,24 @@ const HORAS = Array.from({ length: 14 }, (_, i) => i + 8); // 8..21
     }
   }
 
+  function clearLongPressTimer() {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+  }
+
+  function enterPaintMode() {
+    if (!startCell) return;
+    paintMode = true;
+    const id = slotId(startCell.dataset.day!, startCell.dataset.hour!);
+    dragMode = selected.has(id) ? 'remove' : 'add';
+    toggleCell(startCell, dragMode);
+    grid.classList.add('painting');
+    paintHint.classList.add('visible');
+    if (navigator.vibrate) navigator.vibrate(15);
+  }
+
   grid.addEventListener('pointerdown', (e) => {
     const target = (e.target as HTMLElement).closest('.avail-cell') as HTMLElement | null;
     if (!target) return;
@@ -112,34 +141,77 @@ const HORAS = Array.from({ length: 14 }, (_, i) => i + 8); // 8..21
       toggleCell(target, dragMode);
       grid.setPointerCapture(e.pointerId);
       e.preventDefault();
-    } else {
-      touchStartCell = target;
+      return;
     }
+
+    // Touch / pen: esperamos a ver si es scroll o mantener presionado
+    startCell = target;
+    startX = e.clientX;
+    startY = e.clientY;
+    touchMoved = false;
+    paintMode = false;
+    clearLongPressTimer();
+    longPressTimer = setTimeout(enterPaintMode, LONG_PRESS_MS);
   });
 
   grid.addEventListener('pointermove', (e) => {
-    if (mouseDragging && e.pointerType === 'mouse') {
+    if (e.pointerType === 'mouse') {
+      if (!mouseDragging) return;
       const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
       const target = el?.closest('.avail-cell') as HTMLElement | null;
       if (target) toggleCell(target, dragMode);
+      return;
+    }
+
+    if (paintMode) {
+      e.preventDefault();
+      const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+      const target = el?.closest('.avail-cell') as HTMLElement | null;
+      if (target) toggleCell(target, dragMode);
+      return;
+    }
+
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    if (Math.hypot(dx, dy) > MOVE_THRESHOLD) {
+      touchMoved = true;
+      clearLongPressTimer();
     }
   });
+
+  function endTouchGesture() {
+    clearLongPressTimer();
+    if (paintMode) {
+      paintMode = false;
+      grid.classList.remove('painting');
+      paintHint.classList.remove('visible');
+    } else if (!touchMoved && startCell) {
+      const id = slotId(startCell.dataset.day!, startCell.dataset.hour!);
+      toggleCell(startCell, selected.has(id) ? 'remove' : 'add');
+    }
+    startCell = null;
+    touchMoved = false;
+  }
 
   grid.addEventListener('pointerup', (e) => {
     if (e.pointerType === 'mouse') {
       mouseDragging = false;
       return;
     }
-    if (touchStartCell) {
-      const id = slotId(touchStartCell.dataset.day!, touchStartCell.dataset.hour!);
-      toggleCell(touchStartCell, selected.has(id) ? 'remove' : 'add');
-    }
-    touchStartCell = null;
+    endTouchGesture();
   });
 
-  grid.addEventListener('pointercancel', () => {
-    mouseDragging = false;
-    touchStartCell = null;
+  grid.addEventListener('pointercancel', (e) => {
+    if (e.pointerType === 'mouse') {
+      mouseDragging = false;
+      return;
+    }
+    clearLongPressTimer();
+    paintMode = false;
+    startCell = null;
+    touchMoved = false;
+    grid.classList.remove('painting');
+    paintHint.classList.remove('visible');
   });
 
   window.addEventListener('pointerup', () => {
