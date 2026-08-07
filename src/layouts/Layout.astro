@@ -1,0 +1,30 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title?: string;
+}
+
+const { title = 'Cago Verde' } = Astro.props;
+---
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{title}</title>
+</head>
+<body>
+  <header class="app-header">
+    <h1>Calendario Grupal</h1>
+    <nav>
+      <a href="/">Inicio</a>
+      <a href="/disponibilidad">Mi disponibilidad</a>
+      <a href="/resumen">Calendario grupal</a>
+    </nav>
+  </header>
+  <main>
+    <slot />
+  </main>
+</body>
+</html>

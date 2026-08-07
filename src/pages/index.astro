@@ -1,17 +1,73 @@
 ---
+import Layout from '../layouts/Layout.astro';
+import { getAllParticipants } from '../lib/db';
 
+const participants = await getAllParticipants();
 ---
+<Layout title="Disponibilidad del equipo · Inicio">
+  <div class="card">
+    <h2>¿Cómo te llamas?</h2>
+    <p class="hint">
+      Escribe tu nombre para marcar tu disponibilidad. Si ya te habías registrado,
+      escribe el mismo nombre para continuar donde lo dejaste.
+    </p>
+    <div class="form-group">
+      <label for="name">Nombre</label>
+      <input type="text" id="name" placeholder="Ej. Vozinha" maxlength="40" autocomplete="name" />
+    </div>
+    <button id="continue-btn">Continuar</button>
+    <p id="error-msg" class="hint" style="color: var(--color-danger); display:none;"></p>
+  </div>
 
-<html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro</title>
-	</head>
-	<body>
-		<h1>Astro</h1>
-	</body>
-</html>
+  {participants.length > 0 && (
+    <div class="card">
+      <h3>Ya se registraron ({participants.length})</h3>
+      <div class="participant-list">
+        {participants.map((p) => <span class="chip">{p.name}</span>)}
+      </div>
+    </div>
+  )}
+</Layout>
+
+<script>
+  const btn = document.getElementById('continue-btn') as HTMLButtonElement;
+  const input = document.getElementById('name') as HTMLInputElement;
+  const errorMsg = document.getElementById('error-msg') as HTMLParagraphElement;
+
+  async function submitName() {
+    const name = input.value.trim();
+    errorMsg.style.display = 'none';
+
+    if (!name) {
+      errorMsg.textContent = 'Por favor escribe tu nombre.';
+      errorMsg.style.display = 'block';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Guardando...';
+
+    try {
+      const res = await fetch('/api/participantes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al registrar');
+
+      localStorage.setItem('participant', JSON.stringify(data));
+      window.location.href = '/disponibilidad';
+    } catch (err: any) {
+      errorMsg.textContent = err.message || 'Ocurrió un error, intenta de nuevo.';
+      errorMsg.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Continuar';
+    }
+  }
+
+  btn.addEventListener('click', submitName);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') submitName();
+  });
+</script>

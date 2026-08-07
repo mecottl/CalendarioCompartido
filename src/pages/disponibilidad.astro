@@ -1,0 +1,150 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+const HORAS = Array.from({ length: 14 }, (_, i) => i + 8); // 8..21
+---
+<Layout title="Mi disponibilidad">
+  <div class="card">
+    <h2 id="greeting">Mi disponibilidad</h2>
+    <p class="hint">
+      Toca o arrastra sobre las casillas para marcar los horarios en los que estás disponible,
+      y no olvides guardar al terminar.
+    </p>
+    <button id="switch-user-btn" class="link-muted">¿No eres tú? Cambiar de nombre</button>
+  </div>
+
+  <div class="grid-wrapper">
+    <div class="avail-grid" id="avail-grid">
+      <div class="cell-label"></div>
+      {DIAS.map((dia) => <div class="day-label">{dia}</div>)}
+      {HORAS.map((hora) => (
+        <>
+          <div class="cell-label">{hora}:00</div>
+          {DIAS.map((_, dayIndex) => (
+            <div class="avail-cell" data-day={dayIndex} data-hour={hora}></div>
+          ))}
+        </>
+      ))}
+    </div>
+  </div>
+
+  <div class="actions-bar">
+    <button id="save-btn">Guardar disponibilidad</button>
+  </div>
+  <p class="save-status" id="save-status"></p>
+</Layout>
+
+<script>
+  type Participant = { id: string; name: string };
+
+  const raw = localStorage.getItem('participant');
+  if (!raw) {
+    window.location.href = '/';
+  }
+  const participant: Participant | null = raw ? JSON.parse(raw) : null;
+
+  const greeting = document.getElementById('greeting')!;
+  if (participant) {
+    greeting.textContent = `Hola, ${participant.name} 👋`;
+  }
+
+  document.getElementById('switch-user-btn')?.addEventListener('click', () => {
+    localStorage.removeItem('participant');
+    window.location.href = '/';
+  });
+
+  const grid = document.getElementById('avail-grid')!;
+  const saveBtn = document.getElementById('save-btn') as HTMLButtonElement;
+  const saveStatus = document.getElementById('save-status')!;
+
+  let selected = new Set<string>();
+  let dragging = false;
+  let dragMode: 'add' | 'remove' = 'add';
+
+  function slotId(day: string, hour: string) {
+    return `${day}-${hour}`;
+  }
+
+  function paintCell(cell: HTMLElement, on: boolean) {
+    cell.classList.toggle('selected', on);
+  }
+
+  function loadAvailability() {
+    if (!participant) return;
+    fetch(`/api/disponibilidad?participantId=${participant.id}`)
+      .then((res) => res.json())
+      .then((data) => {
+        selected = new Set<string>(data.slots || []);
+        grid.querySelectorAll<HTMLElement>('.avail-cell').forEach((cell) => {
+          const id = slotId(cell.dataset.day!, cell.dataset.hour!);
+          paintCell(cell, selected.has(id));
+        });
+      })
+      .catch(() => {
+        saveStatus.textContent = 'No se pudo cargar tu disponibilidad guardada.';
+      });
+  }
+
+  function toggleCell(cell: HTMLElement, forceMode: 'add' | 'remove') {
+    const id = slotId(cell.dataset.day!, cell.dataset.hour!);
+    if (forceMode === 'add') {
+      selected.add(id);
+      paintCell(cell, true);
+    } else {
+      selected.delete(id);
+      paintCell(cell, false);
+    }
+  }
+
+  grid.addEventListener('pointerdown', (e) => {
+    const target = (e.target as HTMLElement).closest('.avail-cell') as HTMLElement | null;
+    if (!target) return;
+    dragging = true;
+    const id = slotId(target.dataset.day!, target.dataset.hour!);
+    dragMode = selected.has(id) ? 'remove' : 'add';
+    toggleCell(target, dragMode);
+    grid.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+
+  grid.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+    const target = el?.closest('.avail-cell') as HTMLElement | null;
+    if (target) toggleCell(target, dragMode);
+  });
+
+  function endDrag() {
+    dragging = false;
+  }
+  grid.addEventListener('pointerup', endDrag);
+  grid.addEventListener('pointercancel', endDrag);
+  window.addEventListener('pointerup', endDrag);
+
+  saveBtn.addEventListener('click', async () => {
+    if (!participant) return;
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Guardando...';
+    saveStatus.style.color = 'var(--color-text-muted)';
+    try {
+      const res = await fetch('/api/disponibilidad', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participantId: participant.id, slots: Array.from(selected) }),
+      });
+      if (!res.ok) throw new Error('Error al guardar');
+      saveStatus.style.color = 'var(--color-success)';
+      saveStatus.textContent = '✅ Disponibilidad guardada';
+      setTimeout(() => (saveStatus.textContent = ''), 3000);
+    } catch {
+      saveStatus.style.color = 'var(--color-danger)';
+      saveStatus.textContent = '❌ No se pudo guardar, intenta de nuevo.';
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Guardar disponibilidad';
+    }
+  });
+
+  if (participant) loadAvailability();
+</script>

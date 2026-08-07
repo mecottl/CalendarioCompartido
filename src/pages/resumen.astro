@@ -1,0 +1,105 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { getAggregatedAvailability, getAllParticipants } from '../lib/db';
+
+const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+const DIAS_LARGO = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+const HORAS = Array.from({ length: 14 }, (_, i) => i + 8);
+
+const aggregated = await getAggregatedAvailability();
+const totalParticipants = (await getAllParticipants()).length;
+
+function countFor(day: number, hour: number) {
+  return aggregated[`${day}-${hour}`]?.length || 0;
+}
+function namesFor(day: number, hour: number) {
+  return aggregated[`${day}-${hour}`] || [];
+}
+function levelFor(count: number) {
+  if (totalParticipants === 0 || count === 0) return 0;
+  const ratio = count / totalParticipants;
+  if (ratio >= 0.9) return 5;
+  if (ratio >= 0.7) return 4;
+  if (ratio >= 0.5) return 3;
+  if (ratio >= 0.25) return 2;
+  return 1;
+}
+
+const allSlots: { day: number; hour: number; count: number }[] = [];
+for (let d = 0; d < 7; d++) {
+  for (const h of HORAS) {
+    allSlots.push({ day: d, hour: h, count: countFor(d, h) });
+  }
+}
+const topSlots = allSlots.filter((s) => s.count > 0).sort((a, b) => b.count - a.count).slice(0, 3);
+---
+<Layout title="Resumen de disponibilidad">
+  <div class="card">
+    <h2>Resumen del equipo</h2>
+    <p class="hint">
+      {totalParticipants === 0
+        ? 'Todavía nadie ha marcado su disponibilidad.'
+        : `${totalParticipants} persona(s) registrada(s). Entre más oscura/clara la casilla, más gente disponible.`}
+    </p>
+  </div>
+
+  {topSlots.length > 0 && (
+    <div class="top-slots">
+      {topSlots.map((s, i) => (
+        <div class="top-slot-item">
+          <span>{i + 1}. {DIAS_LARGO[s.day]} {s.hour}:00 - {s.hour + 1}:00</span>
+          <span class="badge">{s.count} disponible(s)</span>
+        </div>
+      ))}
+    </div>
+  )}
+
+  <div class="grid-wrapper">
+    <div class="avail-grid" id="summary-grid">
+      <div class="cell-label"></div>
+      {DIAS.map((dia) => <div class="day-label">{dia}</div>)}
+      {HORAS.map((hora) => (
+        <>
+          <div class="cell-label">{hora}:00</div>
+          {DIAS.map((_, dayIndex) => {
+            const count = countFor(dayIndex, hora);
+            const level = levelFor(count);
+            return (
+              <div
+                class={`avail-cell readonly level-${level}`}
+                data-day={dayIndex}
+                data-hour={hora}
+                data-count={count}
+                data-names={namesFor(dayIndex, hora).join(', ')}
+              ></div>
+            );
+          })}
+        </>
+      ))}
+    </div>
+  </div>
+
+  <div class="slot-detail" id="slot-detail">
+    Toca una casilla para ver quién está disponible en ese horario.
+  </div>
+</Layout>
+
+<script>
+  const DIAS_LARGO = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+  const grid = document.getElementById('summary-grid')!;
+  const detail = document.getElementById('slot-detail')!;
+
+  grid.addEventListener('click', (e) => {
+    const cell = (e.target as HTMLElement).closest('.avail-cell') as HTMLElement | null;
+    if (!cell) return;
+    const day = Number(cell.dataset.day);
+    const hour = cell.dataset.hour;
+    const count = cell.dataset.count;
+    const names = cell.dataset.names;
+    if (!names) {
+      detail.textContent = `${DIAS_LARGO[day]} ${hour}:00 — nadie disponible todavía.`;
+      return;
+    }
+    detail.textContent = `${DIAS_LARGO[day]} ${hour}:00 — ${count} disponible(s): ${names}`;
+  });
+</script>
