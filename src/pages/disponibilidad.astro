@@ -73,6 +73,7 @@ const HORAS = Array.from({ length: 14 }, (_, i) => i + 8);
   function setTouchMode(mode: 'scroll' | 'paint') {
     touchMode = mode;
     grid.classList.toggle('paint-mode', mode === 'paint');
+    grid.style.touchAction = mode === 'paint' ? 'none' : 'pan-x pan-y';
     scrollBtn.classList.toggle('active', mode === 'scroll');
     paintBtn.classList.toggle('active', mode === 'paint');
   }
